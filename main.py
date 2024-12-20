@@ -16,12 +16,12 @@ from tt_job_manager.job_manager import Job, JobManager
 
 class InterpolatedPoint:
 
-    def __init__(self, interpolation_pt_data, lats, lons, velos):
-        num_points = range(len(velos))
-        surface_points = tuple([Point(lats[i], lons[i], velos[i]) for i in num_points])
+    def __init__(self, interpolation_pt_data, lats, lons, vels):
+        num_points = range(len(vels))
+        surface_points = tuple([Point(lats[i], lons[i], vels[i]) for i in num_points])
         interpolator = VInt(surface_points)
         interpolator.set_interpolation_point(Point(interpolation_pt_data[1], interpolation_pt_data[2], 0))
-        self.velocity = tuple([min(velos), round(interpolator.get_interpolated_point().z.evalf(), 2), max(velos)])
+        self.velocity = tuple([min(vels), round(interpolator.get_interpolated_point().z.evalf(), 2), max(vels)])
 
 
 class InterpolatePointJob(Job):
@@ -62,8 +62,8 @@ if __name__ == '__main__':
     job_manager = JobManager()
     keys = []
     for i, stamp in enumerate(velocities_frame.stamp):
-        velos = velocities_frame.iloc[i, 2:].values.flatten().tolist()
-        key = job_manager.submit_job(InterpolatePointJob(empty_waypoint, lat_values, lon_values, velos, stamp, i))
+        velocities = velocities_frame.iloc[i, 2:].values.flatten().tolist()
+        key = job_manager.submit_job(InterpolatePointJob(empty_waypoint, lat_values, lon_values, velocities, stamp, i))
         keys.append(key)
     job_manager.wait()
 
