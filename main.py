@@ -11,15 +11,17 @@ from tt_globals.globals import PresetGlobals
 
 from sympy import Point
 from tt_interpolation.velocity_interpolation import Interpolator as VInt
-from tt_job_manager.job_manager import Job
+from tt_job_manager.job_manager import Job, JobManager
 
 
 class InterpolatedPoint:
 
-    def __init__(self, interpolation_pt_data, surface_points, date_index):
+    def __init__(self, interpolation_pt_data, lats, lons, velos):
+        num_points = range(len(velos))
+        surface_points = tuple([Point(lats[i], lons[i], velos[i]) for i in num_points])
         interpolator = VInt(surface_points)
         interpolator.set_interpolation_point(Point(interpolation_pt_data[1], interpolation_pt_data[2], 0))
-        self.stamp_velocity = tuple([date_index, round(interpolator.get_interpolated_point().z.evalf(), 4)])
+        self.velocity = tuple([min(velos), round(interpolator.get_interpolated_point().z.evalf(), 2), max(velos)])
 
 
 class InterpolatePointJob(Job):
@@ -28,14 +30,10 @@ class InterpolatePointJob(Job):
     def execute_callback(self, result): return super().execute_callback(result)
     def error_callback(self, result): return super().error_callback(result)
 
-    def __init__(self, interpolated_pt: Waypoint, lats: list, lons: list, velocities: list, timestamp: int):
-
-        num_points = range(len(velocities))
-        surface_points = tuple([Point(lats[i], lons[i], velocities[i]) for i in num_points])
+    def __init__(self, interpolated_pt: Waypoint, lats: list, lons: list, velos: list, timestamp: int, index: int):
         interpolated_pt_data = tuple([interpolated_pt.name, interpolated_pt.lat, interpolated_pt.lon])
-
-        arguments = tuple([interpolated_pt_data, surface_points, timestamp])
-        super().__init__(str(timestamp) + ' ' + interpolated_pt.name, timestamp, InterpolatedPoint, arguments)
+        arguments = tuple([interpolated_pt_data, lats, lons, velos])
+        super().__init__(str(index) + ' ' + str(timestamp), timestamp, InterpolatedPoint, arguments)
 
 
 if __name__ == '__main__':
@@ -61,9 +59,11 @@ if __name__ == '__main__':
     velocity_frames = [read_df(wp.velocity_csv_path).rename(columns={'Velocity_Major': 'VM' + str(i)}) for i, wp in enumerate(route.waypoints[1:])]
     velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
 
+    job_manager = JobManager()
+    keys = []
+    for i, stamp in enumerate(velocities_frame.stamp):
+        velos = velocities_frame.iloc[i, 2:].values.flatten().tolist()
+        key = job_manager.submit_job(InterpolatePointJob(empty_waypoint, lat_values, lon_values, velos, stamp, i))
+        keys.append(key)
+    job_manager.wait()
 
-    for stamp in velocities_frame.stamp:
-        velos = velocities_frame[velocities_frame.stamp == stamp].iloc[:, 2:].values.flatten().tolist()
-        job = InterpolatePointJob(empty_waypoint, lat_values, lon_values, velos, stamp)
-        result = job.execute()
-    pass
