@@ -21,7 +21,10 @@ class InterpolatedPoint:
         surface_points = tuple([Point(lats[i], lons[i], vels[i]) for i in num_points])
         interpolator = VInt(surface_points)
         interpolator.set_interpolation_point(Point(interpolation_pt_data[1], interpolation_pt_data[2], 0))
-        self.velocity = tuple([min(vels), round(interpolator.get_interpolated_point().z.evalf(), 2), max(vels)])
+        interpolated_velocity = round(interpolator.get_interpolated_point().z.evalf(), 2)
+        if not min(vels) < interpolated_velocity < max(vels):
+            raise ValueError(interpolated_velocity)
+        self.velocity = float(interpolated_velocity)
 
 
 class InterpolatePointJob(Job):
@@ -58,6 +61,9 @@ if __name__ == '__main__':
     lon_values = [wp.lon for wp in route.waypoints[1:]]
     velocity_frames = [read_df(wp.velocity_csv_path).rename(columns={'Velocity_Major': 'VM' + str(i)}) for i, wp in enumerate(route.waypoints[1:])]
     velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
+    del velocity_frames
+
+    velocities_frame = velocities_frame.iloc[:100]
 
     job_manager = JobManager()
     keys = []
@@ -66,4 +72,11 @@ if __name__ == '__main__':
         key = job_manager.submit_job(InterpolatePointJob(empty_waypoint, lat_values, lon_values, velocities, stamp, i))
         keys.append(key)
     job_manager.wait()
+
+    for key in keys:
+        result = job_manager.get_result(key)
+        print(f'{key} {result.velocity[0]}')
+
+    job_manager.stop_queue()
+
 
