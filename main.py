@@ -24,7 +24,7 @@ class InterpolatedPoint:
         interpolated_velocity = round(interpolator.get_interpolated_point().z.evalf(), 2)
         if not min(vels) < interpolated_velocity < max(vels):
             raise ValueError(interpolated_velocity)
-        self.velocity = float(interpolated_velocity)
+        self.velocity = interpolated_velocity
 
 
 class InterpolatePointJob(Job):
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
     del velocity_frames
 
-    velocities_frame = velocities_frame.iloc[:100]
+    velocities_frame = velocities_frame.iloc[:25]
 
     job_manager = JobManager()
     keys = []
@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
     for key in keys:
         result = job_manager.get_result(key)
-        print(f'{key} {result.velocity[0]}')
+        print(f'{key} {result.velocity}')
 
     job_manager.stop_queue()
 
