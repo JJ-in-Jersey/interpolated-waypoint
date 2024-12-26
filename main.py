@@ -1,13 +1,13 @@
 from argparse import ArgumentParser as argParser
-from os import makedirs
 from pathlib import Path
+
+import numpy as np
 import pandas as pd
 from functools import reduce
 
 from tt_noaa_data.noaa_data import StationDict
 from tt_gpx.gpx import GpxFile, Route, Waypoint
-from tt_file_tools.file_tools import read_df, write_df
-from tt_globals.globals import PresetGlobals
+from tt_file_tools.file_tools import read_df, write_df, print_file_exists
 
 from sympy import Point
 from tt_interpolation.velocity_interpolation import Interpolator as VInt
@@ -24,12 +24,14 @@ class InterpolatedPoint:
         interpolated_velocity = round(interpolator.get_interpolated_point().z.evalf(), 2)
         if not min(vels) < interpolated_velocity < max(vels):
             raise ValueError(interpolated_velocity)
-        self.velocity = interpolated_velocity
+        self.velocity = float(interpolated_velocity)
 
 
+# noinspection PyShadowingNames
 class InterpolatePointJob(Job):
 
     def execute(self): return super().execute()
+
     def execute_callback(self, result): return super().execute_callback(result)
     def error_callback(self, result): return super().error_callback(result)
 
@@ -50,12 +52,10 @@ if __name__ == '__main__':
     route = Route(station_dict.dict, gpx_file.tree)
 
     empty_waypoint = route.waypoints[0]
-    empty_waypoint.folder = PresetGlobals.waypoints_folder.joinpath(empty_waypoint.name)
     empty_waypoint.type = 'P'
     empty_waypoint.symbol = Waypoint.code_symbols[empty_waypoint.type]
     station_dict.add_waypoint(empty_waypoint)
     empty_waypoint.write_gpx()
-    makedirs(empty_waypoint.folder, exist_ok=True)
 
     lat_values = [wp.lat for wp in route.waypoints[1:]]
     lon_values = [wp.lon for wp in route.waypoints[1:]]
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
     del velocity_frames
 
-    velocities_frame = velocities_frame.iloc[:25]
+    velocities_frame = velocities_frame.iloc[:10]
 
     job_manager = JobManager()
     keys = []
@@ -73,10 +73,12 @@ if __name__ == '__main__':
         keys.append(key)
     job_manager.wait()
 
+    velocities_frame['Velocity_Major'] = np.nan
+
     for key in keys:
-        result = job_manager.get_result(key)
-        print(f'{key} {result.velocity}')
+        row_index = velocities_frame.index.get_loc(velocities_frame[velocities_frame['stamp'] == key].index[0])
+        velocities_frame.loc[row_index, 'Velocity_Major'] = job_manager.get_result(key).velocity
+
+    print_file_exists(write_df(velocities_frame, route.waypoints[0].velocity_csv_path))
 
     job_manager.stop_queue()
-
-
