@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from functools import reduce
+from math import ceil
 
 from tt_noaa_data.noaa_data import StationDict
 from tt_gpx.gpx import GpxFile, Route, Waypoint
@@ -21,10 +22,8 @@ class InterpolatedPoint:
         surface_points = tuple([Point(lats[i], lons[i], vels[i]) for i in num_points])
         interpolator = VInt(surface_points)
         interpolator.set_interpolation_point(Point(interpolation_pt_data[1], interpolation_pt_data[2], 0))
-        interpolated_velocity = round(interpolator.get_interpolated_point().z.evalf(), 2)
-        if not min(vels) < interpolated_velocity < max(vels):
-            raise ValueError(interpolated_velocity)
-        self.velocity = float(interpolated_velocity)
+        interpolated_velocity = round(float(interpolator.get_interpolated_point().z.evalf()), 2)
+        self.velocity = interpolated_velocity
 
 
 # noinspection PyShadowingNames
@@ -54,31 +53,45 @@ if __name__ == '__main__':
     empty_waypoint = route.waypoints[0]
     empty_waypoint.type = 'P'
     empty_waypoint.symbol = Waypoint.code_symbols[empty_waypoint.type]
+
     station_dict.add_waypoint(empty_waypoint)
     empty_waypoint.write_gpx()
 
     lat_values = [wp.lat for wp in route.waypoints[1:]]
     lon_values = [wp.lon for wp in route.waypoints[1:]]
-    velocity_frames = [read_df(wp.velocity_csv_path).rename(columns={'Velocity_Major': 'VM' + str(i)}) for i, wp in enumerate(route.waypoints[1:])]
-    velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
-    del velocity_frames
+    waypoint_info = tuple([empty_waypoint.name, empty_waypoint.lat, empty_waypoint.lon])
 
-    # velocities_frame = velocities_frame.iloc[:10]
+    if route.waypoints[0].velocity_csv_path.exists():
+        velocities_frame = read_df(route.waypoints[0].velocity_csv_path)
+    else:
+        velocity_frames = [read_df(wp.velocity_csv_path).rename(columns={'Velocity_Major': 'VM' + str(i)}) for i, wp in enumerate(route.waypoints[1:])]
+        velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
+        velocities_frame.insert(loc=2, column='Velocity_Major', value=np.nan)
+        print_file_exists(write_df(velocities_frame, route.waypoints[0].velocity_csv_path))
+        del velocity_frames
+
+    bite = 1000
+    bites = ceil(velocities_frame.Velocity_Major.isna().sum() / bite)
 
     job_manager = JobManager()
-    keys = []
-    for i, stamp in enumerate(velocities_frame.stamp):
-        velocities = velocities_frame.iloc[i, 2:].values.flatten().tolist()
-        key = job_manager.submit_job(InterpolatePointJob(empty_waypoint, lat_values, lon_values, velocities, stamp, i))
-        keys.append(key)
-    job_manager.wait()
 
-    velocities_frame['Velocity_Major'] = np.nan
+    for count in range(bites):
+        start = velocities_frame[velocities_frame.Velocity_Major.isna()].index[0]
+        end = start + bite if start + bite < len(velocities_frame) else len(velocities_frame)
+        print(start, end)
 
-    for key in keys:
-        row_index = velocities_frame.index.get_loc(velocities_frame[velocities_frame['stamp'] == key].index[0])
-        velocities_frame.loc[row_index, 'Velocity_Major'] = job_manager.get_result(key).velocity
+        keys = []
+        for i, stamp in enumerate(velocities_frame[start:end].stamp):
+            velocities = velocities_frame.iloc[i + start, 3:].values.flatten().tolist()
+            key = job_manager.submit_job(InterpolatePointJob(empty_waypoint, lat_values, lon_values, velocities, stamp, i + start))
+            keys.append(key)
+        job_manager.wait()
 
-    print_file_exists(write_df(velocities_frame, route.waypoints[0].velocity_csv_path))
+        for key in keys:
+            row_index = velocities_frame.index.get_loc(velocities_frame[velocities_frame['stamp'] == key].index[0])
+            velocities_frame.loc[row_index, 'Velocity_Major'] = job_manager.get_result(key).velocity
+
+        print_file_exists(write_df(velocities_frame, route.waypoints[0].velocity_csv_path))
+
 
     job_manager.stop_queue()
