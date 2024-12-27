@@ -63,7 +63,7 @@ if __name__ == '__main__':
     velocities_frame = reduce(lambda left, right: pd.merge(left, right, on=['stamp', 'Time']), velocity_frames)
     del velocity_frames
 
-    velocities_frame = velocities_frame.iloc[:10]
+    # velocities_frame = velocities_frame.iloc[:10]
 
     job_manager = JobManager()
     keys = []
