@@ -93,5 +93,4 @@ if __name__ == '__main__':
 
         print_file_exists(write_df(velocities_frame, route.waypoints[0].velocity_csv_path))
 
-
     job_manager.stop_queue()
