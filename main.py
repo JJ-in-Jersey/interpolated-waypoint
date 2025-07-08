@@ -11,8 +11,8 @@ from tt_noaa_data.noaa_data import StationDict
 from tt_gpx.gpx import GpxFile, Route, Waypoint
 from tt_file_tools.file_tools import print_file_exists
 
-from tt_job_manager.job_manager import Job, JobManager
-from tt_jobs.jobs import InterpolatedPoint, InterpolatePointJob
+from tt_job_manager.job_manager import JobManager
+from tt_jobs.jobs import InterpolatePointJob
 
 if __name__ == '__main__':
 
@@ -38,8 +38,7 @@ if __name__ == '__main__':
     if route.waypoints[0].velocity_csv_path.exists():
         velocity_frame = DataFrame(csv_source=route.waypoints[0].velocity_csv_path)
     else:
-        velocity_frame = (reduce(lambda left, right: merge(left, right, on=['stamp', 'Time']),
-            [DataFrame(csv_source=wp.velocity_csv_path).filter(['Time', 'stamp', 'Velocity_Major']).rename(columns={'Velocity_Major': 'VM' + str(i)}) for i, wp in enumerate(route.waypoints[1:])]))
+        velocity_frame = (reduce(lambda left, right: merge(left, right, on=['stamp', 'Time']), [DataFrame(csv_source=wp.velocity_csv_path).filter(['Time', 'stamp', 'Velocity_Major']).rename(columns={'Velocity_Major': 'VM' + str(i)}) for i, wp in enumerate(route.waypoints[1:])]))
         velocity_frame.insert(loc=2, column='Velocity_Major', value=nan)
         print_file_exists(velocity_frame.write(route.waypoints[0].velocity_csv_path))
 
