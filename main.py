@@ -20,6 +20,9 @@ if __name__ == '__main__':
     ap.add_argument('filepath', type=Path, help='path to gpx file')
     args = vars(ap.parse_args())
 
+    if not args['filepath'].exists():
+        raise FileExistsError
+
     station_dict = StationDict()
     gpx_file = GpxFile(args['filepath'])
     route = Route(station_dict, gpx_file.tree)
